@@ -2,7 +2,7 @@
   "room": {
     "title": "ARCADE",
     "tagline": "Take the stairs down. The four lit machines on the back wall are live.",
-    "openInNewTab": true,
+    "openInNewTab": false,
     "exit": {
       "label": "EXIT",
       "description": "Leave the arcade and return to The Nexus.",
