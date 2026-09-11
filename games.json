@@ -5,8 +5,8 @@
     "openInNewTab": true,
     "exit": {
       "label": "EXIT",
-      "description": "Leave the arcade and head back to the main site.",
-      "url": "https://shaden.technology/",
+      "description": "Leave the arcade and return to The Nexus.",
+      "url": "https://shaden.technology/nexus/",
       "accent": "#ff3355",
       "confirm": true,
       "openInNewTab": false
