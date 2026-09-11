@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>ARCADE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#010604;
+    --ink:#e6f6ff;
+    --dim:#8aa0b4;
+    --panel:rgba(4,8,18,.86);
+    --acc:#5fe9ff;
+    --acc-rgb:95,233,255;
+    --font:"Chakra Petch", system-ui, sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  [hidden]{display:none !important}
+  html,body{height:100%;overflow:hidden;background:var(--void);color:var(--ink);font-family:var(--font);-webkit-tap-highlight-color:transparent}
+
+  #scene{position:fixed;inset:0;touch-action:none;cursor:grab}
+  #scene.dragging{cursor:grabbing}
+  #scene.pointing{cursor:pointer}
+  #scene canvas{display:block}
+
+  /* CRT scanlines + vignette over the 3D view */
+  #fx{position:fixed;inset:0;pointer-events:none;z-index:2;
+    background:
+      repeating-linear-gradient(0deg,transparent 0 2px,rgba(255,255,255,.022) 2px 3px),
+      radial-gradient(ellipse at center,transparent 55%,rgba(0,0,0,.72) 100%)}
+
+  .hud{position:fixed;z-index:5;pointer-events:none}
+  #brand{top:max(16px,env(safe-area-inset-top));left:18px}
+  #brand h1{font-size:19px;font-weight:700;letter-spacing:.03em;text-shadow:0 0 14px rgba(185,140,255,.75)}
+  #brand p{font-size:13px;line-height:1.4;color:var(--dim);margin-top:4px;max-width:36ch}
+
+  #loading{position:fixed;inset:0;z-index:20;display:grid;place-items:center;font-size:15px;color:var(--dim);background:var(--void);transition:opacity .6s}
+  #loading.gone{opacity:0;pointer-events:none}
+
+  /* mobile joystick */
+  #stick{position:fixed;z-index:6;left:max(22px,env(safe-area-inset-left));bottom:max(28px,env(safe-area-inset-bottom));
+    width:124px;height:124px;border-radius:50%;border:1px solid rgba(185,140,255,.45);
+    background:radial-gradient(circle,rgba(185,140,255,.12),rgba(4,8,18,.55) 70%);display:none;touch-action:none}
+  #knob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;
+    background:rgba(185,140,255,.25);border:1px solid #b98cff;box-shadow:0 0 18px rgba(185,140,255,.5)}
+  @media (pointer:coarse){ #stick{display:block} }
+
+  #toast{position:fixed;z-index:8;top:max(78px,calc(env(safe-area-inset-top) + 66px));left:50%;
+    transform:translate(-50%,-6px);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;
+    padding:9px 16px;background:var(--panel);border:1px solid rgba(95,233,255,.35);font-size:14px;white-space:nowrap}
+  #toast.show{opacity:1;transform:translate(-50%,0)}
+
+  /* popup */
+  #modal{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:16px}
+  #modal .backdrop{position:absolute;inset:0;background:rgba(0,3,8,.6);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px)}
+  .m-wrap{position:relative;width:min(440px,100%);filter:drop-shadow(0 0 22px rgba(var(--acc-rgb),.45))}
+  #modal.opening .m-wrap{animation:materialize .34s cubic-bezier(.2,.9,.25,1) both}
+  @keyframes materialize{0%{transform:scale(1.08,.015);opacity:.3}45%{transform:scale(1.02,.05);opacity:1}100%{transform:none;opacity:1}}
+  .m-frame{background:var(--acc);padding:1px;
+    clip-path:polygon(0 0,calc(100% - 22px) 0,100% 22px,100% 100%,22px 100%,0 calc(100% - 22px))}
+  .m-card{position:relative;background:linear-gradient(180deg,#0a0e1c,#04060d);max-height:calc(100dvh - 34px);overflow:auto;
+    clip-path:polygon(0 0,calc(100% - 22px) 0,100% 22px,100% 100%,22px 100%,0 calc(100% - 22px))}
+  .m-media{aspect-ratio:16/10;background:#000;position:relative;overflow:hidden}
+  .m-media img{width:100%;height:100%;object-fit:cover;display:block}
+  .m-media::after{content:"";position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(0deg,transparent 0 2px,rgba(0,0,0,.16) 2px 3px)}
+  .m-body{padding:20px 22px 22px}
+  #mTitle{font-size:32px;font-weight:700;line-height:1.05;color:#fff;text-shadow:0 0 16px rgba(var(--acc-rgb),.65)}
+  #mDesc{font-size:16px;line-height:1.5;color:#b8c8d8;margin-top:10px}
+  .m-play{display:flex;justify-content:center;align-items:center;margin-top:22px;padding:15px;
+    background:var(--acc);color:#050505;font:700 18px var(--font);text-decoration:none;
+    clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+  .m-play:hover{filter:brightness(1.12)}
+  .m-play:focus-visible{outline:none;box-shadow:inset 0 0 0 3px #050505,inset 0 0 0 5px #fff}
+  .m-close{position:absolute;top:12px;right:30px;z-index:2;width:40px;height:40px;cursor:pointer;
+    background:rgba(0,0,0,.6);border:1px solid rgba(var(--acc-rgb),.7);color:#fff;font:400 24px/1 var(--font)}
+  .m-close:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+  @media (prefers-reduced-motion:reduce){
+    #modal.opening .m-wrap{animation:none}
+  }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div id="fx"></div>
+
+<div class="hud" id="brand">
+  <h1 id="brandTitle">ARCADE</h1>
+  <p id="hint">Drag to look. W A S D to move, Shift to run. Click a lit machine.</p>
+</div>
+
+<div id="stick" aria-hidden="true"><div id="knob"></div></div>
+<div id="toast" role="status" aria-live="polite"></div>
+<div id="loading">Loading the arcade…</div>
+
+<div id="modal" hidden>
+  <div class="backdrop" data-close></div>
+  <div class="m-wrap" role="dialog" aria-modal="true" aria-labelledby="mTitle">
+    <div class="m-frame">
+      <div class="m-card">
+        <button class="m-close" type="button" aria-label="Close" data-close>×</button>
+        <div class="m-media"><img id="mImg" alt=""></div>
+        <div class="m-body">
+          <h2 id="mTitle"></h2>
+          <p id="mDesc"></p>
+          <a id="mPlay" class="m-play" href="#">Play</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+"use strict";
+
+/* =====================================================================
+   DATA
+   Loaded from games.json. This copy is only used if the JSON can't be
+   fetched (e.g. opening index.html straight from disk).
+   ===================================================================== */
+const FALLBACK_DATA = {
+  room: { title: "ARCADE", openInNewTab: true,
+    exit: { label: "EXIT", description: "Leave the arcade and head back to the main site.", url: "https://shaden.technology/", accent: "#ff3355", confirm: true, openInNewTab: false } },
+  games: [
+    { title:"MINES",        description:"Clear safe tiles on a hidden grid. Each one raises your multiplier; hit a mine and the round ends.", image:"images/mines.jpg",        url:"https://shaden.technology/mines/",        accent:"#d69ca3" },
+    { title:"DIAMONDS",     description:"Reveal gems and match stones. The more of the same stone you land, the higher the payout.",         image:"images/diamonds.jpg",     url:"https://shaden.technology/diamonds/",     accent:"#2f8cff" },
+    { title:"HOOPS",        description:"Time your shot and sink it. Longer shots pay more, and a miss resets your streak.",                   image:"images/hoops.gif",       url:"https://shaden.technology/hoops/",        accent:"#ff8a1f" },
+    { title:"COLLECT CASH", description:"Grab the cash as it drops and dodge the duds. The longer you last, the bigger the haul.",             image:"images/collect-cash.jpg", url:"https://lilmayo.cash/", accent:"#22e06b" }
+  ]
+};
+const DEFAULT_ACCENTS = ["#d69ca3","#2f8cff","#ff8a1f","#22e06b"];
+// characters used by the wall rain and the ceiling rain
+const GLYPHS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*+-=[]{}|;:<>?/!～！￥（）【】";
+// arcade palette for the rain: red, yellow, blue, purple, pink, mint
+const RAIN_COLORS = ["#ff4060", "#ffd447", "#4da6ff", "#b98cff", "#ff6ed2", "#3dffaa"];
+const DECOR_NAMES = ["Null Runner","Byte Brawl","Sector Nine","Glitch Kart","Neon Drift","Void Pilot","Proxy War","Echo Grid",
+                     "Datastorm","Rail Ghost","Ion Strike","Deep Relay","Hex Tunnel","Static Bloom","Low Orbit","Kernel Panic"];
+
+const $ = s => document.querySelector(s);
+const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const touch = matchMedia("(pointer: coarse)").matches;
+
+const ROOM = { hw: 11, hd: 16, h: 4.6 };   // half-width, half-depth, height (meters)
+const EYE = 1.62;
+const FOG = 0.026;
+
+/* =====================================================================
+   RENDERER
+   ===================================================================== */
+const container = $("#scene");
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, touch ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight);
+container.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x010604);
+scene.fog = new THREE.FogExp2(0x010604, FOG);
+
+const camera = new THREE.PerspectiveCamera(touch ? 72 : 64, innerWidth / innerHeight, 0.05, 80);
+camera.rotation.order = "YXZ";
+
+const TIME = { value: 0 };
+
+/* =====================================================================
+   HELPERS
+   ===================================================================== */
+function hexToRgbString(hex) {
+  const c = new THREE.Color(hex);
+  return [c.r, c.g, c.b].map(v => Math.round(v * 255)).join(",");
+}
+
+// shrink the font until the text fits the given width
+function fitFont(ctx, text, maxWidth, size, step = 2, min = 12) {
+  let fs = size;
+  ctx.font = `700 ${fs}px "Chakra Petch", sans-serif`;
+  while (ctx.measureText(text).width > maxWidth && fs > min) { fs -= step; ctx.font = `700 ${fs}px "Chakra Petch", sans-serif`; }
+}
+
+function glowText(text, { w = 512, h = 128, size = 64, color = "#fff", glow = "#5fe9ff", bg = null } = {}) {
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const x = c.getContext("2d");
+  if (bg) { x.fillStyle = bg; x.fillRect(0, 0, w, h); }
+  fitFont(x, text, w * 0.9, size);
+  x.textAlign = "center"; x.textBaseline = "middle";
+  x.shadowColor = glow; x.shadowBlur = 18;
+  x.fillStyle = color;
+  x.fillText(text, w / 2, h / 2 + 2);
+  x.fillText(text, w / 2, h / 2 + 2);   // second pass makes the glow stronger
+  const t = new THREE.CanvasTexture(c);
+  t.minFilter = THREE.LinearFilter;
+  return t;
+}
+
+// placeholder screen art, used until/unless the real image loads
+function placeholderArt(game) {
+  const w = 640, h = 400;
+  const c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  const x = c.getContext("2d");
+  const rgb = hexToRgbString(game.accent);
+  const g = x.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w * 0.65);
+  g.addColorStop(0, `rgba(${rgb},.35)`);
+  g.addColorStop(1, "#03040a");
+  x.fillStyle = g; x.fillRect(0, 0, w, h);
+  x.strokeStyle = `rgba(${rgb},.18)`; x.lineWidth = 1;
+  for (let i = 0; i <= w; i += 32) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i, h); x.stroke(); }
+  for (let i = 0; i <= h; i += 32) { x.beginPath(); x.moveTo(0, i); x.lineTo(w, i); x.stroke(); }
+  x.strokeStyle = game.accent; x.lineWidth = 4; x.shadowColor = game.accent; x.shadowBlur = 20;
+  x.strokeRect(18, 18, w - 36, h - 36);
+  fitFont(x, game.title.toUpperCase(), w * 0.82, 92, 4, 0);
+  x.textAlign = "center"; x.textBaseline = "middle";
+  x.fillStyle = "#fff"; x.shadowBlur = 28;
+  x.fillText(game.title.toUpperCase(), w / 2, h / 2);
+  return c;
+}
+
+/* =====================================================================
+   MATRIX RAIN (your code, drawn to an offscreen canvas used on the walls)
+   ===================================================================== */
+const RAIN = (() => {
+  const W = 1024, H = 512;                 // texture size (power of two)
+  const rc = document.createElement("canvas");
+  rc.width = W; rc.height = H;
+  const rctx = rc.getContext("2d");
+  const fontSize = 18;
+  const chars = GLYPHS;
+  const COLORS = RAIN_COLORS.map(hexToRgbString);
+  const WHITE = "245,245,255";
+  const BG = "3,4,10";
+  const pick = () => COLORS[Math.floor(Math.random() * COLORS.length)];
+
+  const columns = Math.floor(W / fontSize);
+  const drops = [];
+  rctx.fillStyle = "rgb(" + BG + ")";
+  rctx.fillRect(0, 0, W, H);
+  for (let i = 0; i < columns; i++) {
+    drops.push({ y: Math.random() * H / fontSize, color: pick(), speed: 0.35 + Math.random() * 0.5 });
+  }
+
+  const tex = new THREE.CanvasTexture(rc);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+
+  function drawFrozen() {
+    rctx.font = fontSize + "px monospace";
+    for (let i = 0; i < columns; i++) {
+      const x = i * fontSize;
+      const start = Math.random() * H;
+      const len = 10 + Math.floor(Math.random() * 30);
+      rctx.shadowColor = "rgba(" + drops[i].color + ",0.5)";
+      rctx.shadowBlur = 6;
+      for (let j = 0; j < len; j++) {
+        const y = start + j * fontSize;
+        if (y < 0 || y > H) continue;
+        const ch = chars.charAt(Math.floor(Math.random() * chars.length));
+        const fade = 1 - (j / len);
+        const col = (ch >= "0" && ch <= "9") ? WHITE : drops[i].color;
+        rctx.fillStyle = "rgba(" + col + "," + (0.2 + fade * 0.55) + ")";
+        rctx.fillText(ch, x, y);
+      }
+    }
+    rctx.shadowBlur = 0;
+    tex.needsUpdate = true;
+  }
+
+  let last = 0;
+  function update(t) {
+    if (reduced || t - last < 66) return;
+    last = t;
+    rctx.fillStyle = "rgba(" + BG + ",0.05)";
+    rctx.fillRect(0, 0, W, H);
+    rctx.font = fontSize + "px monospace";
+    rctx.shadowBlur = 6;
+    for (let i = 0; i < columns; i++) {
+      const d = drops[i];
+      const ch = chars.charAt(Math.floor(Math.random() * chars.length));
+      const x = i * fontSize;
+      const y = d.y * fontSize;
+      rctx.shadowColor = "rgba(" + d.color + ",0.55)";
+      rctx.fillStyle = (ch >= "0" && ch <= "9") ? "rgba(" + WHITE + ",0.95)" : "rgba(" + d.color + ",0.92)";
+      rctx.fillText(ch, x, y);
+      d.y += d.speed;
+      if (y > H && Math.random() > 0.955) { d.y = 0; d.color = pick(); }
+    }
+    rctx.shadowBlur = 0;
+    tex.needsUpdate = true;
+  }
+
+  if (reduced) drawFrozen();
+  return { tex, update };
+})();
+
+/* =====================================================================
+   ROOM
+   ===================================================================== */
+function buildRoom() {
+  // rain walls: one shared texture, UVs scaled per wall so glyphs stay the same size
+  const wallMat = new THREE.MeshBasicMaterial({ map: RAIN.tex, color: 0xffffff });
+  function wall(width, x, z, ry, offset) {
+    const geo = new THREE.PlaneGeometry(width, ROOM.h);
+    const uv = geo.attributes.uv;
+    const rep = width / (ROOM.h * 2);                   // texture is 2:1
+    for (let i = 0; i < uv.count; i++) uv.setX(i, uv.getX(i) * rep + offset);
+    const m = new THREE.Mesh(geo, wallMat);
+    m.position.set(x, ROOM.h / 2, z);
+    m.rotation.y = ry;
+    scene.add(m);
+  }
+  wall(ROOM.hw * 2, 0, -ROOM.hd, 0, 0);
+  wall(ROOM.hw * 2, 0,  ROOM.hd, Math.PI, 0.37);
+  wall(ROOM.hd * 2, -ROOM.hw, 0,  Math.PI / 2, 0.61);
+  wall(ROOM.hd * 2,  ROOM.hw, 0, -Math.PI / 2, 0.13);
+
+  // floor + grid
+  const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.hw * 2, ROOM.hd * 2),
+    new THREE.MeshBasicMaterial({ color: 0x04060c }));
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+  const grid = new THREE.GridHelper(32, 32, 0x5a3f9a, 0x243056);
+  grid.position.y = 0.005;
+  scene.add(grid);
+
+  // center aisle guide lines
+  const aisleMat = new THREE.LineBasicMaterial({ color: 0xb98cff, transparent: true, opacity: 0.5 });
+  [-2, 2].forEach(ax => {
+    const g = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(ax, 0.01, 15.5), new THREE.Vector3(ax, 0.01, -13.4)]);
+    scene.add(new THREE.Line(g, aisleMat));
+  });
+
+  // ceiling
+  const ceilGeo = new THREE.PlaneGeometry(ROOM.hw * 2, ROOM.hd * 2);
+  const cuv = ceilGeo.attributes.uv;
+  for (let i = 0; i < cuv.count; i++) {
+    cuv.setXY(i, cuv.getX(i) * (ROOM.hw * 2) / (ROOM.h * 2), cuv.getY(i) * (ROOM.hd * 2) / ROOM.h);
+  }
+  const ceil = new THREE.Mesh(ceilGeo, new THREE.MeshBasicMaterial({ map: RAIN.tex, color: 0x5a5a5a }));
+  ceil.rotation.x = Math.PI / 2;
+  ceil.position.y = ROOM.h;
+  scene.add(ceil);
+
+  // bunker structure: beams, wall ribs (dark solids with faint edge lines)
+  const darkMat = new THREE.MeshBasicMaterial({ color: 0x06080f });
+  const edgeMat = new THREE.LineBasicMaterial({ color: 0x3a4a6a, transparent: true, opacity: 0.55 });
+  function block(w, h, d, x, y, z) {
+    const geo = new THREE.BoxGeometry(w, h, d);
+    const m = new THREE.Mesh(geo, darkMat);
+    m.position.set(x, y, z);
+    scene.add(m);
+    const e = new THREE.LineSegments(new THREE.EdgesGeometry(geo), edgeMat);
+    e.position.copy(m.position);
+    scene.add(e);
+  }
+  [-8, 0, 8].forEach(z => {
+    block(ROOM.hw * 2, 0.36, 0.3, 0, ROOM.h - 0.18, z);                 // ceiling beam
+    block(0.45, ROOM.h, 0.6, -ROOM.hw + 0.225, ROOM.h / 2, z);          // left rib
+    block(0.45, ROOM.h, 0.6,  ROOM.hw - 0.225, ROOM.h / 2, z);          // right rib
+  });
+  [-8, 8].forEach(x => block(0.6, ROOM.h, 0.45, x, ROOM.h / 2, -ROOM.hd + 0.225));
+
+  // hanging strip lights
+  const tubeMat = new THREE.MeshBasicMaterial({ color: 0xe8e0ff });
+  [[0, -10], [0, -3], [0, 4], [0, 11], [-8, -4], [-8, 4], [8, -4], [8, 4]].forEach(([x, z]) => {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 1.6), tubeMat);
+    t.position.set(x, ROOM.h - 0.55, z);
+    scene.add(t);
+  });
+
+  // falling particles
+  const N = 350, pos = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    pos[i * 3] = (Math.random() - 0.5) * ROOM.hw * 2;
+    pos[i * 3 + 1] = Math.random() * ROOM.h;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * ROOM.hd * 2;
+  }
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const dust = new THREE.Points(pg, new THREE.PointsMaterial({
+    color: 0xb98cff, size: 0.03, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+  scene.add(dust);
+  return dust;
+}
+
+/* =====================================================================
+   RAIN FROM THE CEILING
+   Columns of glyphs that drop out of the ceiling and fall to the floor,
+   so looking up you see code raining down on you.
+   ===================================================================== */
+let FALL = null;
+function buildFallingRain() {
+  const chars = GLYPHS;
+  const G = 8, S = 512, cell = S / G;                       // 8x8 glyph atlas
+  const c = document.createElement("canvas");
+  c.width = c.height = S;
+  const x = c.getContext("2d");
+  x.fillStyle = "#fff"; x.textAlign = "center"; x.textBaseline = "middle";
+  x.font = `${Math.round(cell * 0.8)}px monospace`;
+  for (let i = 0; i < G * G; i++) {
+    x.fillText(chars.charAt(i % chars.length), (i % G) * cell + cell / 2, Math.floor(i / G) * cell + cell / 2);
+  }
+  const atlas = new THREE.CanvasTexture(c);
+  atlas.minFilter = THREE.LinearFilter;
+
+  const COLORS = RAIN_COLORS.map(h => new THREE.Color(h));
+  const STREAMS = touch ? 36 : 70;    // how many falling columns
+  const TRAIL = 7;                    // glyphs per column
+  const N = STREAMS * TRAIL;
+  const pos = new Float32Array(N * 3), info = new Float32Array(N * 4), col = new Float32Array(N * 3);
+  let k = 0;
+  for (let s = 0; s < STREAMS; s++) {
+    const sx = (Math.random() - 0.5) * (ROOM.hw * 2 - 1);
+    const sz = (Math.random() - 0.5) * (ROOM.hd * 2 - 1);
+    const speed = 0.55 + Math.random() * 0.8;   // meters per second
+    const phase = Math.random();
+    const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+    for (let t = 0; t < TRAIL; t++, k++) {
+      pos[k * 3] = sx; pos[k * 3 + 1] = 0; pos[k * 3 + 2] = sz;
+      info[k * 4] = speed; info[k * 4 + 1] = phase; info[k * 4 + 2] = t; info[k * 4 + 3] = Math.random();
+      col[k * 3] = color.r; col[k * 3 + 1] = color.g; col[k * 3 + 2] = color.b;
+    }
+  }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  geo.setAttribute("aInfo", new THREE.BufferAttribute(info, 4));
+  geo.setAttribute("aColor", new THREE.BufferAttribute(col, 3));
+
+  FALL = new THREE.ShaderMaterial({
+    uniforms: {
+      uAtlas: { value: atlas }, uTime: { value: reduced ? 7.3 : 0 }, uScale: { value: 1 },
+      uCeil: { value: ROOM.h }, uTrail: { value: TRAIL }
+    },
+    vertexShader: `
+      attribute vec4 aInfo; attribute vec3 aColor;
+      uniform float uTime; uniform float uScale; uniform float uCeil; uniform float uTrail;
+      varying vec3 vColor; varying float vAlpha; varying float vGlyph;
+      const float GAP = 0.2;
+      void main(){
+        float span = uCeil + uTrail * GAP + 2.5;
+        float fall = mod(uTime * aInfo.x + aInfo.y * span, span);
+        float y = uCeil - fall + aInfo.z * GAP;             // head at the bottom, trail above it
+        float visible = step(0.0, y) * step(y, uCeil - 0.05);
+        vAlpha = visible * pow(1.0 - aInfo.z / uTrail, 1.6);
+        vColor = mix(aColor, vec3(1.0), step(aInfo.z, 0.5) * 0.75);  // bright white-ish head
+        vGlyph = floor(mod(aInfo.w * 64.0 + floor(uTime * (2.0 + aInfo.w * 6.0)), 64.0));
+        vec4 mv = modelViewMatrix * vec4(position.x, y, position.z, 1.0);
+        vAlpha *= exp(-${(FOG * FOG).toFixed(5)} * mv.z * mv.z);
+        gl_PointSize = min(0.2 * uScale / max(-mv.z, 0.1), 96.0) * visible;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D uAtlas;
+      varying vec3 vColor; varying float vAlpha; varying float vGlyph;
+      void main(){
+        if (vAlpha < 0.01) discard;
+        float cx = mod(vGlyph, 8.0), cy = floor(vGlyph / 8.0);
+        vec2 uv = vec2((cx + gl_PointCoord.x) / 8.0, (8.0 - cy - gl_PointCoord.y) / 8.0);
+        float g = texture2D(uAtlas, uv).a;
+        gl_FragColor = vec4(vColor * g * vAlpha * 1.2, 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+  });
+  const pts = new THREE.Points(geo, FALL);
+  pts.frustumCulled = false;
+  scene.add(pts);
+  updateFallScale();
+}
+function updateFallScale() {
+  if (!FALL) return;
+  FALL.uniforms.uScale.value = renderer.getPixelRatio() * innerHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+}
+
+/* =====================================================================
+   MACHINES
+   ===================================================================== */
+// cabinet side profile (x = depth from front, y = height), extruded to cabinet width
+const CAB_W = 0.78;
+const CAB_GEO = (() => {
+  const s = new THREE.Shape();
+  const p = [[0.10,0],[0.72,0],[0.72,1.92],[0.08,1.92],[0.02,1.64],[0.14,1.60],[0.26,1.56],[0.10,1.10],[0.00,1.02],[0.00,0.93],[0.10,0.88]];
+  s.moveTo(p[0][0], p[0][1]);
+  for (let i = 1; i < p.length; i++) s.lineTo(p[i][0], p[i][1]);
+  s.closePath();
+  const g = new THREE.ExtrudeGeometry(s, { depth: CAB_W, bevelEnabled: false });
+  g.rotateY(Math.PI / 2);          // front now faces +Z
+  g.translate(-CAB_W / 2, 0, 0.36);
+  return g;
+})();
+const CAB_EDGES = new THREE.EdgesGeometry(CAB_GEO, 20);
+const SCREEN_W = 0.64, SCREEN_H = 0.487;
+const SCREEN_GEO = new THREE.PlaneGeometry(SCREEN_W, SCREEN_H);
+const MARQUEE_GEO = new THREE.PlaneGeometry(0.74, 0.27);
+
+// hologram material: fresnel glow + moving scanlines
+const HOLO_VERT = `
+  varying vec3 vN; varying vec3 vV; varying float vY; varying float vD;
+  void main(){
+    vec4 wp = modelMatrix * vec4(position,1.0);
+    vY = wp.y;
+    vec4 mv = viewMatrix * wp;
+    vV = -mv.xyz; vD = -mv.z;
+    vN = normalize(normalMatrix * normal);
+    gl_Position = projectionMatrix * mv;
+  }`;
+const HOLO_FRAG = `
+  uniform vec3 uColor; uniform float uTime; uniform float uIntensity;
+  varying vec3 vN; varying vec3 vV; varying float vY; varying float vD;
+  void main(){
+    float fres = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.0);
+    float scan = 0.75 + 0.25 * sin(vY * 80.0 - uTime * 5.0);
+    float sweep = 1.0 - smoothstep(0.0, 0.05, abs(fract(vY * 0.45 - uTime * 0.2) - 0.5));
+    float a = ((0.06 + fres * 0.85) * scan + sweep * 0.15) * uIntensity;
+    float fog = exp(-${(FOG * FOG).toFixed(5)} * vD * vD * (uIntensity > 1.0 ? 0.35 : 1.0));
+    gl_FragColor = vec4(uColor * a * fog, 1.0);
+  }`;
+function holoMaterial(color, intensity) {
+  return new THREE.ShaderMaterial({
+    uniforms: { uColor: { value: new THREE.Color(color) }, uTime: TIME, uIntensity: { value: intensity } },
+    vertexShader: HOLO_VERT, fragmentShader: HOLO_FRAG,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+  });
+}
+
+// 2D hologram of the game image, mounted on the wall above each lit machine
+const PIC_W = 1.9, PIC_H = 1.19, PIC_Y = 3.3;
+function holoPictureMaterial(map, imgAspect, color) {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      uMap: { value: map }, uImgAspect: { value: imgAspect }, uColor: { value: new THREE.Color(color) },
+      uTime: TIME, uIntensity: { value: 1 }, uSize: { value: new THREE.Vector2(PIC_W, PIC_H) }
+    },
+    vertexShader: `
+      varying vec2 vUv; varying float vD;
+      void main(){
+        vUv = uv;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vD = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `
+      uniform sampler2D uMap; uniform float uImgAspect; uniform vec3 uColor;
+      uniform float uTime; uniform float uIntensity; uniform vec2 uSize;
+      varying vec2 vUv; varying float vD;
+      float hash(float n){ return fract(sin(n) * 43758.5453); }
+      void main(){
+        vec2 uv = vUv;
+        // cover-crop the image to the panel
+        vec2 c = uv - 0.5;
+        float r = uImgAspect / (uSize.x / uSize.y);
+        if (r > 1.0) c.x /= r; else c.y *= r;
+        c += 0.5;
+        // occasional glitch slices
+        float row = floor(uv.y * 36.0);
+        float g = step(0.97, hash(row * 7.13 + floor(uTime * 9.0)));
+        c.x += g * (hash(row + floor(uTime * 9.0)) - 0.5) * 0.04;
+        // slight RGB split
+        float rr = texture2D(uMap, c + vec2(0.004, 0.0)).r;
+        vec3 mid = texture2D(uMap, c).rgb;
+        float bb = texture2D(uMap, c - vec2(0.004, 0.0)).b;
+        vec3 img = vec3(rr, mid.g, bb);
+        float lum = dot(img, vec3(0.299, 0.587, 0.114));
+        vec3 col = mix(img, uColor * lum * 1.5, 0.3);          // keep the image, tint it toward the game color
+        float scan = 0.72 + 0.28 * sin(uv.y * 380.0 - uTime * 6.0);
+        float sweep = 1.0 - smoothstep(0.0, 0.025, abs(fract(uv.y * 0.7 - uTime * 0.22) - 0.5));
+        // soft edges + glowing corner brackets
+        vec2 m = min(uv, 1.0 - uv) * uSize;                    // meters to the nearest edge
+        float edge = smoothstep(0.0, 0.1, min(m.x, m.y));
+        float t = 0.018, L = 0.24;
+        float bracket = max(step(m.x, t) * step(m.y, L), step(m.y, t) * step(m.x, L));
+        vec3 outc = (col * scan * 0.9 + uColor * 0.05) * edge + uColor * sweep * 0.22 * edge + uColor * bracket * 1.3;
+        outc *= uIntensity * exp(-${(FOG * FOG).toFixed(5)} * vD * vD * 0.35);
+        gl_FragColor = vec4(outc, 1.0);
+      }`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+  });
+}
+
+const DECOR_COLOR = 0x5fe9ff;
+const DECOR_HOLO = holoMaterial(DECOR_COLOR, 0.2);
+const DECOR_EDGE = new THREE.LineBasicMaterial({ color: DECOR_COLOR, transparent: true, opacity: 0.09, blending: THREE.AdditiveBlending, depthWrite: false });
+const DECOR_SCREEN = new THREE.MeshBasicMaterial({ map: RAIN.tex, color: 0x1c3038, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false });
+
+const clickTargets = [];   // invisible hit boxes for the lit machines and the exit door
+let decorMesh = null;      // all dim machines merged into one mesh
+const featured = [];       // lit machines, for animation + hover
+
+const texLoader = new THREE.TextureLoader();
+texLoader.setCrossOrigin("anonymous");
+
+// one lit, clickable machine (the dim ones are baked into merged meshes in buildMachines)
+function makeLitMachine({ x, z, ry, wall }, game) {
+  const group = new THREE.Group();
+  group.position.set(x, 0, z);
+  group.rotation.y = ry;
+  scene.add(group);
+  const add = (mesh) => { group.add(mesh); return mesh; };
+
+  const color = game.accent;
+  const bodyMat = holoMaterial(color, 2.0);
+  add(new THREE.Mesh(CAB_GEO, bodyMat));
+  add(new THREE.LineSegments(CAB_EDGES,
+    new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false })));
+
+  // screen (tilted face of the cabinet): placeholder art until the real image loads
+  const art = placeholderArt(game);
+  const fallback = new THREE.CanvasTexture(art);
+  const screenMat = new THREE.MeshBasicMaterial({ map: fallback, fog: false });
+  const picMat = holoPictureMaterial(fallback, art.width / art.height, color);
+  game._placeholder = art.toDataURL("image/png");
+  if (game.image) {
+    texLoader.load(game.image, tex => {
+      const P = SCREEN_W / SCREEN_H, I = tex.image.width / tex.image.height;
+      picMat.uniforms.uMap.value = tex;
+      picMat.uniforms.uImgAspect.value = I;
+      if (I > P) { tex.repeat.set(P / I, 1); tex.offset.set((1 - P / I) / 2, 0); }   // cover-crop to the screen
+      else       { tex.repeat.set(1, I / P); tex.offset.set(0, (1 - I / P) / 2); }
+      screenMat.map = tex; screenMat.needsUpdate = true;
+    }, undefined, () => {});
+  }
+  const screen = add(new THREE.Mesh(SCREEN_GEO, screenMat));
+  screen.position.set(0, 1.33, 0.18);
+  screen.rotation.x = -0.3346;
+  screen.translateZ(0.012);
+
+  // marquee
+  const marquee = add(new THREE.Mesh(MARQUEE_GEO, new THREE.MeshBasicMaterial({
+    map: glowText(game.title.toUpperCase(), { color: "#ffffff", glow: game.accent, bg: "#000" }),
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 1 })));
+  marquee.position.set(0, 1.78, 0.31);
+  marquee.rotation.x = -0.2111;
+  marquee.translateZ(0.012);
+
+  // invisible click box
+  const hit = add(new THREE.Mesh(new THREE.BoxGeometry(0.9, 2, 0.85), new THREE.MeshBasicMaterial({ visible: false })));
+  hit.position.y = 1;
+  hit.userData = { game };
+  clickTargets.push(hit);
+
+  // floor ring, spinning arc, light beam
+  const glowMat = (opacity) => new THREE.MeshBasicMaterial({ color, transparent: true, opacity,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+  const ring = add(new THREE.Mesh(new THREE.RingGeometry(0.66, 0.72, 48), glowMat(0.9)));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.015;
+  const arc = add(new THREE.Mesh(new THREE.RingGeometry(0.82, 0.85, 48, 1, 0, Math.PI * 1.3), glowMat(0.7)));
+  arc.rotation.x = -Math.PI / 2; arc.position.y = 0.015;
+  const beam = add(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.75, ROOM.h, 24, 1, true), glowMat(0.08)));
+  beam.position.y = ROOM.h / 2;
+
+  // floating name
+  const label = add(new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowText(game.title, { w: 512, h: 128, size: 70, color: "#ffffff", glow: game.accent }),
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })));
+  label.scale.set(1.7, 0.425, 1);
+  label.position.y = 2.3;
+
+  // hologram picture on the wall above the machine
+  const pic = add(new THREE.Mesh(new THREE.PlaneGeometry(PIC_W, PIC_H), picMat));
+  pic.position.set(0, PIC_Y, -wall + 0.03);
+
+  featured.push({ game, bodyMat, picMat, arc, beam, label, hover: 0, phase: Math.random() * 6 });
+}
+
+function buildMachines(games, title) {
+  // lit machine spots, in games.json order:
+  // 1st = left wall, 2nd = back wall left, 3rd = back wall right, 4th = right wall
+  const LIT_SLOTS = [
+    { x: -10.6, z: -4,    ry:  Math.PI / 2, wall: 0.37 },
+    { x: -5,    z: -14.7, ry: 0, wall: 1.27 },
+    { x:  5,    z: -14.7, ry: 0, wall: 1.27 },
+    { x:  10.6, z: -4,    ry: -Math.PI / 2, wall: 0.37 }
+  ];
+  games.forEach((g, i) => makeLitMachine(LIT_SLOTS[i], g));
+
+  // accent strip in front of the lit row
+  const strip = new THREE.Mesh(new THREE.PlaneGeometry(11.6, 0.05),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.7, blending: THREE.AdditiveBlending }));
+  strip.rotation.x = -Math.PI / 2;
+  strip.position.set(0, 0.012, -13.6);
+  scene.add(strip);
+
+  // big sign on the back wall
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(7.4, 1.48), new THREE.MeshBasicMaterial({
+    map: glowText(title, { w: 1024, h: 205, size: 130, color: "#ffffff", glow: "#b98cff", bg: "#000" }),
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false }));
+  sign.position.set(0, 3.55, -15.9);
+  scene.add(sign);
+
+  // ---------- dim decor machines (lots of them) ----------
+  // Every dim machine is baked into a handful of merged meshes so hundreds stay fast.
+  const B = { cab: [], cabN: [], edge: [], scr: [], scrUV: [], mq: [], mqUV: [] };
+  const _v = new THREE.Vector3(), _n = new THREE.Vector3(), _nm = new THREE.Matrix3();
+  const CAB_NI = CAB_GEO.index ? CAB_GEO.toNonIndexed() : CAB_GEO;
+  const SCR_NI = SCREEN_GEO.toNonIndexed();
+  const MQ_NI = MARQUEE_GEO.toNonIndexed();
+  const localMatrix = (y, z, rx) => {
+    const o = new THREE.Object3D();
+    o.position.set(0, y, z); o.rotation.x = rx; o.translateZ(0.012); o.updateMatrix();
+    return o.matrix;
+  };
+  const SCR_LOCAL = localMatrix(1.33, 0.18, -0.3346);
+  const MQ_LOCAL = localMatrix(1.78, 0.31, -0.2111);
+  function bake(geo, mat, outPos, outNrm, outUV, uvMap) {
+    const p = geo.attributes.position, nrm = geo.attributes.normal, uv = geo.attributes.uv;
+    if (outNrm) _nm.getNormalMatrix(mat);
+    for (let i = 0; i < p.count; i++) {
+      _v.fromBufferAttribute(p, i).applyMatrix4(mat);
+      outPos.push(_v.x, _v.y, _v.z);
+      if (outNrm) { _n.fromBufferAttribute(nrm, i).applyMatrix3(_nm).normalize(); outNrm.push(_n.x, _n.y, _n.z); }
+      if (outUV) { const r = uvMap(uv.getX(i), uv.getY(i)); outUV.push(r[0], r[1]); }
+    }
+  }
+  let count = 0;
+  function decor(x, z, ry) {
+    const m = new THREE.Matrix4().makeRotationY(ry).setPosition(x, 0, z);
+    bake(CAB_NI, m, B.cab, B.cabN);
+    bake(CAB_EDGES, m, B.edge);
+    const ru = Math.random(), rv = Math.random();
+    bake(SCR_NI, m.clone().multiply(SCR_LOCAL), B.scr, null, B.scrUV, (u, v) => [u * 0.3 + ru, v * 0.3 + rv]);
+    const row = count % DECOR_NAMES.length;
+    bake(MQ_NI, m.clone().multiply(MQ_LOCAL), B.mq, null, B.mqUV, (u, v) => [u, (DECOR_NAMES.length - 1 - row + v) / DECOR_NAMES.length]);
+    count++;
+  }
+  const near = (a, list, d) => list.some(b => Math.abs(a - b) < d);
+  const STEP = 0.82;   // cabinet width + small gap
+
+  // side walls: full rows, leaving room for the ribs and the lit machines
+  for (let z = -14.5; z <= 14.51; z += STEP) {
+    if (near(z, [-8, 0, 8], 0.72) || Math.abs(z + 4) < 1.7) continue;
+    decor(-10.6, z,  Math.PI / 2);
+    decor( 10.6, z, -Math.PI / 2);
+  }
+  // back wall: full row, leaving room for the ribs and the two lit machines
+  for (let x = -9.8; x <= 9.81; x += STEP) {
+    if (near(x, [-8, 8], 0.72) || near(x, [-5, 5], 1.7)) continue;
+    decor(x, -15.6, 0);
+  }
+  // front wall: full row, leaving the exit door clear
+  for (let x = -9.8; x <= 9.81; x += STEP) {
+    if (Math.abs(x) < 1.9) continue;
+    decor(x, 15.6, Math.PI);
+  }
+  // floor: four back-to-back double rows, split by cross aisles
+  // (center aisle stays open; gaps line up with the side-wall lit machines, the entrance and the back wall)
+  [-7, -3.5, 3.5, 7].forEach(cx => {
+    [[-11, -6], [-1.8, 3.4], [5.4, 10.2]].forEach(([a, b]) => {
+      if (Math.abs(cx) === 3.5 && a === 5.4) return;   // keep the area near the entrance open
+      for (let z = a; z <= b + 0.01; z += STEP) {
+        decor(cx - 0.37, z, -Math.PI / 2);
+        decor(cx + 0.37, z,  Math.PI / 2);
+      }
+    });
+  });
+
+  // marquee name atlas: one texture, one row per name
+  const RW = 512, RH = 128;
+  const atlas = document.createElement("canvas");
+  atlas.width = RW; atlas.height = RH * DECOR_NAMES.length;
+  const ax = atlas.getContext("2d");
+  ax.fillStyle = "#000"; ax.fillRect(0, 0, atlas.width, atlas.height);
+  ax.textAlign = "center"; ax.textBaseline = "middle";
+  DECOR_NAMES.forEach((name, i) => {
+    const text = name.toUpperCase();
+    fitFont(ax, text, RW * 0.9, 56);
+    ax.shadowColor = "#5fe9ff"; ax.shadowBlur = 18; ax.fillStyle = "#5fe9ff";
+    ax.fillText(text, RW / 2, i * RH + RH / 2 + 2);
+    ax.fillText(text, RW / 2, i * RH + RH / 2 + 2);
+  });
+  const atlasTex = new THREE.CanvasTexture(atlas);
+  atlasTex.minFilter = THREE.LinearFilter;
+
+  const F = (arr, n) => new THREE.Float32BufferAttribute(arr, n);
+  const addMerged = (obj) => { obj.frustumCulled = false; scene.add(obj); return obj; };
+  const cabGeo = new THREE.BufferGeometry();
+  cabGeo.setAttribute("position", F(B.cab, 3)); cabGeo.setAttribute("normal", F(B.cabN, 3));
+  decorMesh = addMerged(new THREE.Mesh(cabGeo, DECOR_HOLO));
+  const edgeGeo = new THREE.BufferGeometry();
+  edgeGeo.setAttribute("position", F(B.edge, 3));
+  addMerged(new THREE.LineSegments(edgeGeo, DECOR_EDGE));
+  const scrGeo = new THREE.BufferGeometry();
+  scrGeo.setAttribute("position", F(B.scr, 3)); scrGeo.setAttribute("uv", F(B.scrUV, 2));
+  addMerged(new THREE.Mesh(scrGeo, DECOR_SCREEN));
+  const mqGeo = new THREE.BufferGeometry();
+  mqGeo.setAttribute("position", F(B.mq, 3)); mqGeo.setAttribute("uv", F(B.mqUV, 2));
+  addMerged(new THREE.Mesh(mqGeo, new THREE.MeshBasicMaterial({
+    map: atlasTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.3 })));
+}
+
+/* =====================================================================
+   EXIT DOOR (front wall, behind where you start)
+   ===================================================================== */
+let exitFx = null;
+function buildExit(exit) {
+  const color = new THREE.Color(exit.accent);
+  const g = new THREE.Group();
+  g.position.set(0, 0, ROOM.hd - 0.02);
+  g.rotation.y = Math.PI;                       // face into the room
+  scene.add(g);
+  const W = 1.5, H = 2.5;
+
+  const hole = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshBasicMaterial({ color: 0x010204 }));
+  hole.position.set(0, H / 2, 0.01);
+  g.add(hole);
+
+  const leafMat = holoMaterial(exit.accent, 0.9);
+  const edgeMat = new THREE.LineBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
+  const leafGeo = new THREE.BoxGeometry(W / 2 - 0.03, H - 0.06, 0.05);
+  const leafEdges = new THREE.EdgesGeometry(leafGeo);
+  const winEdges = new THREE.EdgesGeometry(new THREE.PlaneGeometry(0.34, 0.5));
+  const barGeo = new THREE.CylinderGeometry(0.02, 0.02, W / 2 - 0.2, 8);
+  [-1, 1].forEach(side => {
+    const lx = side * W / 4;
+    const leaf = new THREE.Mesh(leafGeo, leafMat); leaf.position.set(lx, H / 2, 0.05); g.add(leaf);
+    const e = new THREE.LineSegments(leafEdges, edgeMat); e.position.copy(leaf.position); g.add(e);
+    const win = new THREE.LineSegments(winEdges, edgeMat); win.position.set(lx, 1.75, 0.08); g.add(win);
+    const bar = new THREE.Mesh(barGeo, leafMat); bar.rotation.z = Math.PI / 2; bar.position.set(lx, 1.05, 0.1); g.add(bar);
+  });
+  const frame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(W + 0.12, H + 0.06, 0.12)), edgeMat);
+  frame.position.set(0, H / 2 + 0.03, 0.06);
+  g.add(frame);
+
+  // light spilling onto the floor
+  const gc = document.createElement("canvas"); gc.width = gc.height = 128;
+  const gx = gc.getContext("2d");
+  const grad = gx.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, "rgba(255,255,255,1)"); grad.addColorStop(1, "rgba(255,255,255,0)");
+  gx.fillStyle = grad; gx.fillRect(0, 0, 128, 128);
+  const spill = new THREE.Mesh(new THREE.PlaneGeometry(2.6, 1.6), new THREE.MeshBasicMaterial({
+    map: new THREE.CanvasTexture(gc), color, transparent: true, opacity: 0.35, blending: THREE.AdditiveBlending, depthWrite: false }));
+  spill.rotation.x = -Math.PI / 2;
+  spill.position.set(0, 0.012, 0.3);
+  g.add(spill);
+
+  // EXIT sign
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 0.375), new THREE.MeshBasicMaterial({
+    map: glowText(exit.label.toUpperCase(), { w: 256, h: 96, size: 66, color: "#ffffff", glow: exit.accent, bg: "#000" }),
+    transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  sign.position.set(0, H + 0.4, 0.06);
+  g.add(sign);
+  const signFrame = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.PlaneGeometry(1.04, 0.41)), edgeMat);
+  signFrame.position.copy(sign.position);
+  g.add(signFrame);
+
+  const hit = new THREE.Mesh(new THREE.BoxGeometry(W + 0.3, H + 0.8, 0.8), new THREE.MeshBasicMaterial({ visible: false }));
+  hit.position.set(0, (H + 0.8) / 2, 0.3);
+  hit.userData = { exit: true };
+  g.add(hit);
+  clickTargets.push(hit);
+
+  exitFx = { leafMat, spill, hover: 0 };
+}
+
+/* =====================================================================
+   HOLO VISITORS
+   Simple hologram people: some walk loops through the aisles,
+   some stand at dim machines playing.
+   ===================================================================== */
+const avatars = [];
+const AV_COLORS = ["#5fe9ff", "#8ff7ff", "#b98cff", "#ff6ed2", "#3dffaa"];
+const avMats = [];
+const avMatByColor = {};
+const AV = {
+  leg:   new THREE.CylinderGeometry(0.07, 0.055, 0.9, 8).translate(0, -0.45, 0),
+  torso: new THREE.CylinderGeometry(0.2, 0.14, 0.62, 10),
+  arm:   new THREE.CylinderGeometry(0.05, 0.04, 0.64, 6).translate(0, -0.32, 0),
+  head:  new THREE.SphereGeometry(0.12, 12, 10)
+};
+
+function makeAvatar(color) {
+  let mat = avMatByColor[color];
+  if (!mat) { mat = avMatByColor[color] = holoMaterial(color, 0.55); avMats.push(mat); }
+  const root = new THREE.Group();
+  const body = new THREE.Group();
+  root.add(body);
+  const part = (geo, x, y, parent) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, 0); parent.add(m); return m; };
+  const pivot = (x, y) => { const g = new THREE.Group(); g.position.set(x, y, 0); body.add(g); return g; };
+  const legL = pivot(-0.11, 0.92), legR = pivot(0.11, 0.92);
+  part(AV.leg, 0, 0, legL); part(AV.leg, 0, 0, legR);
+  part(AV.torso, 0, 1.26, body);
+  const armL = pivot(-0.26, 1.52), armR = pivot(0.26, 1.52);
+  part(AV.arm, 0, 0, armL); part(AV.arm, 0, 0, armR);
+  const head = part(AV.head, 0, 1.73, body);
+  root.scale.setScalar(0.94 + Math.random() * 0.12);   // slightly different heights
+  scene.add(root);
+  return { root, body, legL, legR, armL, armR, head, phase: Math.random() * 10 };
+}
+
+function buildAvatars() {
+  // walking loops (x, z corners), all along open aisles
+  const loops = [
+    [[-5.25, 13.4], [-5.25, -12.5], [5.25, -12.5], [5.25, 13.4]],
+    [[-9, 13.4], [-9, -12.5], [-1.2, -12.5], [-1.2, 13.4]],
+    [[9, 13.4], [1.2, 13.4], [1.2, -12.5], [9, -12.5]],
+    [[-9, -3.9], [9, -3.9], [9, 4.4], [-9, 4.4]],
+    [[-5.25, -3.9], [-5.25, 4.4], [5.25, 4.4], [5.25, -3.9]],
+    [[0.6, 11], [0.6, -11.5], [-0.6, -11.5], [-0.6, 11]]
+  ];
+  // people playing: stand in front of a dim machine (machine x, z, facing)
+  const stand = (mx, mz, ry) => [mx + Math.sin(ry) * 0.72, mz + Math.cos(ry) * 0.72, ry + Math.PI];
+  const players = [
+    stand(-3.13, -1.8 + 0.82 * 2, Math.PI / 2),
+    stand( 3.13, -1.8 + 0.82 * 4, -Math.PI / 2),
+    stand(-7.37, -11 + 0.82 * 3, -Math.PI / 2),
+    stand( 7.37, -1.8 + 0.82 * 5, Math.PI / 2),
+    stand(-3.87, -11 + 0.82 * 1, -Math.PI / 2),
+    stand( 3.87, -11 + 0.82 * 5, Math.PI / 2),
+    stand(-10.6, -14.5 + 0.82 * 30, Math.PI / 2)
+  ];
+  const nWalk = touch ? 4 : loops.length;
+  const nPlay = touch ? 4 : players.length;
+
+  for (let i = 0; i < nWalk; i++) {
+    const pts = loops[i].map(([x, z]) => new THREE.Vector2(x, z));
+    const segs = [];
+    let total = 0;
+    for (let k = 0; k < pts.length; k++) {
+      const a = pts[k], b = pts[(k + 1) % pts.length], len = a.distanceTo(b);
+      segs.push({ a, b, len, start: total });
+      total += len;
+    }
+    const av = makeAvatar(AV_COLORS[i % AV_COLORS.length]);
+    Object.assign(av, { mode: "walk", segs, total, dist: Math.random() * total, speed: 0.9 + Math.random() * 0.45 });
+    avatars.push(av);
+  }
+  for (let i = 0; i < nPlay; i++) {
+    const [x, z, ry] = players[i];
+    const av = makeAvatar(AV_COLORS[(i + 2) % AV_COLORS.length]);
+    av.mode = "play";
+    av.root.position.set(x, 0, z);
+    av.root.rotation.y = ry;
+    avatars.push(av);
+  }
+  updateAvatars(0, 0);
+}
+
+function updateAvatars(dt, t) {
+  if (reduced && dt > 0) return;
+  if (!reduced) avMats.forEach((m, i) => {
+    m.uniforms.uIntensity.value = 0.55 * (0.93 + Math.sin(t * 27 + i * 2.1) * 0.05 + (Math.random() < 0.004 ? -0.4 : 0));
+  });
+  for (const av of avatars) {
+    if (av.mode === "walk") {
+      av.dist = (av.dist + dt * av.speed) % av.total;
+      let seg = av.segs[0];
+      for (const sg of av.segs) if (av.dist >= sg.start) seg = sg;
+      const k = (av.dist - seg.start) / seg.len;
+      av.root.position.set(seg.a.x + (seg.b.x - seg.a.x) * k, 0, seg.a.y + (seg.b.y - seg.a.y) * k);
+      // turn smoothly toward the direction of travel
+      const target = Math.atan2(seg.b.x - seg.a.x, seg.b.y - seg.a.y);
+      let d = target - av.root.rotation.y;
+      d = Math.atan2(Math.sin(d), Math.cos(d));
+      av.root.rotation.y += dt > 0 ? d * Math.min(1, dt * 6) : d;
+      // walk cycle
+      av.phase += dt * av.speed * 5.5;
+      const sw = Math.sin(av.phase);
+      av.legL.rotation.x = sw * 0.5;   av.legR.rotation.x = -sw * 0.5;
+      av.armL.rotation.x = -sw * 0.4;  av.armR.rotation.x = sw * 0.4;
+      av.body.position.y = Math.abs(Math.cos(av.phase)) * 0.035;
+    } else {
+      // hands on the controls, small button-mashing motion
+      const p = av.phase;
+      av.armL.rotation.x = -1.1 + Math.sin(t * 9 + p) * 0.06;
+      av.armR.rotation.x = -1.15 + Math.sin(t * 13 + p * 2) * 0.08;
+      av.armL.rotation.z = 0.15;
+      av.armR.rotation.z = -0.15;
+      av.body.rotation.z = Math.sin(t * 1.3 + p) * 0.03;
+      av.head.position.y = 1.73 + Math.sin(t * 2 + p) * 0.01;
+      // every few seconds, a quick little celebration hop
+      const c = (t + p) % 7;
+      av.body.position.y = c < 0.6 ? Math.abs(Math.sin(c * Math.PI / 0.3)) * 0.06 : 0;
+    }
+  }
+}
+
+/* =====================================================================
+   CONTROLS
+   ===================================================================== */
+const player = { x: 0, z: 12.5, yaw: 0, pitch: -0.03, vx: 0, vz: 0, bob: 0 };
+const keys = {};
+const stick = { x: 0, y: 0, id: null };
+const mouse = { x: 0, y: 0 };   // last mouse position, for hover
+let modalOpen = false;
+
+addEventListener("keydown", e => {
+  if (modalOpen) return;
+  keys[e.code] = true;
+  if (e.code.startsWith("Arrow")) e.preventDefault();
+});
+addEventListener("keyup", e => { keys[e.code] = false; });
+addEventListener("blur", () => { for (const k in keys) keys[k] = false; });
+
+// drag to look + tap/click to select
+let lookId = null, lx = 0, ly = 0, downX = 0, downY = 0, downT = 0;
+const canvas = renderer.domElement;
+canvas.addEventListener("pointerdown", e => {
+  if (modalOpen || lookId !== null) return;
+  lookId = e.pointerId; lx = downX = e.clientX; ly = downY = e.clientY; downT = performance.now();
+  canvas.setPointerCapture(e.pointerId);
+  container.classList.add("dragging");
+});
+canvas.addEventListener("pointermove", e => {
+  if (e.pointerType === "mouse") { mouse.x = e.clientX; mouse.y = e.clientY; }
+  if (e.pointerId !== lookId) return;
+  const sens = e.pointerType === "touch" ? 0.0055 : 0.0032;
+  player.yaw -= (e.clientX - lx) * sens;
+  player.pitch -= (e.clientY - ly) * sens;
+  player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
+  lx = e.clientX; ly = e.clientY;
+});
+function endLook(e) {
+  if (e.pointerId !== lookId) return;
+  lookId = null;
+  container.classList.remove("dragging");
+  if (e.type === "pointerup" && Math.hypot(e.clientX - downX, e.clientY - downY) < 8 && performance.now() - downT < 500) {
+    select(e.clientX, e.clientY);
+  }
+}
+canvas.addEventListener("pointerup", endLook);
+canvas.addEventListener("pointercancel", endLook);
+canvas.addEventListener("wheel", e => {
+  if (modalOpen) return;
+  const step = -e.deltaY * 0.004;
+  player.x += -Math.sin(player.yaw) * step;
+  player.z += -Math.cos(player.yaw) * step;
+}, { passive: true });
+
+// joystick
+const stickEl = $("#stick"), knob = $("#knob");
+function stickMove(e) {
+  const r = stickEl.getBoundingClientRect();
+  const max = r.width / 2;
+  let dx = e.clientX - (r.left + max), dy = e.clientY - (r.top + max);
+  const len = Math.hypot(dx, dy);
+  if (len > max) { dx *= max / len; dy *= max / len; }
+  stick.x = dx / max; stick.y = dy / max;
+  knob.style.transform = `translate(${dx}px,${dy}px)`;
+}
+stickEl.addEventListener("pointerdown", e => { stick.id = e.pointerId; stickEl.setPointerCapture(e.pointerId); stickMove(e); });
+stickEl.addEventListener("pointermove", e => { if (e.pointerId === stick.id) stickMove(e); });
+const stickEnd = e => { if (e.pointerId !== stick.id) return; stick.id = null; stick.x = stick.y = 0; knob.style.transform = ""; };
+stickEl.addEventListener("pointerup", stickEnd);
+stickEl.addEventListener("pointercancel", stickEnd);
+
+// raycasting
+const ray = new THREE.Raycaster();
+const ndc = new THREE.Vector2();
+function pick(cx, cy, withDecor = false) {
+  ndc.set((cx / innerWidth) * 2 - 1, -(cy / innerHeight) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  const targets = withDecor && decorMesh ? clickTargets.concat(decorMesh) : clickTargets;
+  const hits = ray.intersectObjects(targets, false);
+  if (!hits.length) return null;
+  return hits[0].object === decorMesh ? { decor: true } : hits[0].object.userData;
+}
+function select(cx, cy) {
+  const hit = pick(cx, cy, true);
+  if (!hit) return;
+  if (hit.game) openModal(hit.game);
+  else if (hit.exit) openExit();
+  else toast("Out of order. Try one of the lit machines.");
+}
+
+/* =====================================================================
+   UI: popup + toast
+   ===================================================================== */
+const modal = $("#modal"), mImg = $("#mImg"), mTitle = $("#mTitle"), mDesc = $("#mDesc"), mPlay = $("#mPlay");
+let lastFocus = null;
+let OPEN_NEW_TAB = true;
+
+function showPopup({ accent, title, description, image, button, url, newTab }) {
+  modalOpen = true;
+  for (const k in keys) keys[k] = false;
+  lastFocus = document.activeElement;
+  modal.style.setProperty("--acc", accent);
+  modal.style.setProperty("--acc-rgb", hexToRgbString(accent));
+  $(".m-media").hidden = !image;
+  mTitle.textContent = title;
+  mDesc.textContent = description;
+  mPlay.textContent = button;
+  mPlay.href = url;
+  if (newTab) { mPlay.target = "_blank"; mPlay.rel = "noopener"; }
+  else { mPlay.removeAttribute("target"); mPlay.removeAttribute("rel"); }
+  modal.hidden = false;
+  modal.classList.remove("opening"); void modal.offsetWidth; modal.classList.add("opening");
+  mPlay.focus({ preventScroll: true });
+}
+
+function openModal(game) {
+  mImg.onerror = () => { mImg.onerror = null; mImg.src = game._placeholder; };
+  mImg.src = game.image || game._placeholder;
+  mImg.alt = game.title;
+  showPopup({ accent: game.accent, title: game.title, description: game.description, image: true,
+              button: "PLAY " + game.title, url: game.url, newTab: OPEN_NEW_TAB });
+}
+
+let EXIT = null;
+function openExit() {
+  if (!EXIT) return;
+  if (EXIT.confirm === false) {                // go straight to the link
+    if (EXIT.openInNewTab) window.open(EXIT.url, "_blank", "noopener");
+    else location.href = EXIT.url;
+    return;
+  }
+  const label = EXIT.label.toUpperCase();
+  showPopup({ accent: EXIT.accent, title: label, description: EXIT.description, image: false,
+              button: label, url: EXIT.url, newTab: EXIT.openInNewTab });
+}
+function closeModal() {
+  modal.hidden = true;
+  modalOpen = false;
+  if (lastFocus && lastFocus.focus) lastFocus.focus();
+}
+modal.addEventListener("click", e => { if (e.target.closest("[data-close]")) closeModal(); });
+addEventListener("keydown", e => {
+  if (!modalOpen) return;
+  if (e.key === "Escape") closeModal();
+  if (e.key === "Tab") {           // keep focus inside the popup
+    const f = [modal.querySelector(".m-close"), mPlay];
+    const i = f.indexOf(document.activeElement);
+    e.preventDefault();
+    f[(i + (e.shiftKey ? -1 : 1) + f.length) % f.length].focus();
+  }
+});
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+/* =====================================================================
+   LOOP
+   ===================================================================== */
+let dust;
+const clock = new THREE.Clock();
+
+function tick(now) {
+  requestAnimationFrame(tick);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+  TIME.value = t;
+  RAIN.update(now);
+  if (FALL && !reduced) FALL.uniforms.uTime.value = t;
+
+  // movement
+  if (!modalOpen) {
+    let f = 0, s = 0;
+    if (keys.KeyW || keys.ArrowUp) f += 1;
+    if (keys.KeyS || keys.ArrowDown) f -= 1;
+    if (keys.KeyD) s += 1;
+    if (keys.KeyA) s -= 1;
+    if (keys.ArrowLeft) player.yaw += dt * 2;
+    if (keys.ArrowRight) player.yaw -= dt * 2;
+    f += -stick.y; s += stick.x;
+    const mag = Math.hypot(f, s);
+    if (mag > 1) { f /= mag; s /= mag; }
+    const speed = (keys.ShiftLeft || keys.ShiftRight) ? 5.6 : 3.0;
+    const sy = Math.sin(player.yaw), cy = Math.cos(player.yaw);
+    const tx = (-sy * f + cy * s) * speed;
+    const tz = (-cy * f - sy * s) * speed;
+    const k = 1 - Math.exp(-dt * 10);
+    player.vx += (tx - player.vx) * k;
+    player.vz += (tz - player.vz) * k;
+  } else {
+    player.vx = player.vz = 0;
+  }
+  player.x += player.vx * dt;
+  player.z += player.vz * dt;
+  player.x = Math.max(-ROOM.hw + 0.5, Math.min(ROOM.hw - 0.5, player.x));
+  player.z = Math.max(-ROOM.hd + 0.5, Math.min(ROOM.hd - 0.5, player.z));
+
+  const moving = Math.hypot(player.vx, player.vz);
+  if (!reduced) player.bob += dt * moving * 2.4;
+  camera.position.set(player.x, EYE + (reduced ? 0 : Math.sin(player.bob) * 0.025 * Math.min(1, moving)), player.z);
+  camera.rotation.set(player.pitch, player.yaw, 0);
+
+  // hover (mouse only)
+  let hovered = null, exitHover = false;
+  if (!modalOpen && lookId === null && !touch) {
+    const h = pick(mouse.x, mouse.y);
+    hovered = h && h.game ? h.game : null;
+    exitHover = !!(h && h.exit);
+    container.classList.toggle("pointing", !!hovered || exitHover);
+  }
+  if (exitFx) {
+    exitFx.hover += ((exitHover ? 1 : 0) - exitFx.hover) * Math.min(1, dt * 8);
+    exitFx.leafMat.uniforms.uIntensity.value = 0.9 + exitFx.hover * 0.9;
+    exitFx.spill.material.opacity = 0.35 + exitFx.hover * 0.2;
+  }
+
+  // lit machine animation
+  featured.forEach(m => {
+    m.hover += ((m.game === hovered ? 1 : 0) - m.hover) * Math.min(1, dt * 8);
+    const flick = reduced ? 1 : 0.94 + Math.sin(t * 23 + m.phase) * 0.04;
+    m.bodyMat.uniforms.uIntensity.value = (2.0 + m.hover * 1.2) * flick;
+    m.beam.material.opacity = 0.08 + m.hover * 0.06;
+    m.picMat.uniforms.uIntensity.value = (1 + m.hover * 0.35) *
+      (reduced ? 1 : 0.92 + Math.sin(t * 17 + m.phase) * 0.05 + (Math.random() < 0.006 ? -0.45 : 0));
+    if (!reduced) {
+      m.arc.rotation.z = t * 0.8 + m.phase;
+      m.label.position.y = 2.3 + Math.sin(t * 1.5 + m.phase) * 0.05;
+    }
+  });
+
+  updateAvatars(dt, t);
+
+  DECOR_HOLO.uniforms.uIntensity.value = reduced ? 0.2 : 0.2 * (0.93 + Math.sin(t * 31) * 0.04 + (Math.random() < 0.01 ? -0.3 : 0));
+
+  if (dust && !reduced) {
+    const p = dust.geometry.attributes.position;
+    for (let i = 0; i < p.count; i++) {
+      let y = p.getY(i) - dt * 0.25;
+      if (y < 0) y = ROOM.h;
+      p.setY(i, y);
+    }
+    p.needsUpdate = true;
+  }
+
+  renderer.render(scene, camera);
+}
+
+addEventListener("resize", () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  updateFallScale();
+});
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+async function loadData() {
+  try {
+    const r = await fetch("games.json", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch (err) {
+    console.warn("Couldn't load games.json, using the built-in copy. Serve the folder over http(s) to use the JSON.", err);
+    return FALLBACK_DATA;
+  }
+}
+
+async function boot() {
+  const data = await loadData();
+  const room = Object.assign({ title: "ARCADE" }, data.room || {});
+  OPEN_NEW_TAB = room.openInNewTab !== false;
+  document.title = room.title;
+  $("#brandTitle").textContent = room.title;
+  if (touch) $("#hint").textContent = "Left stick to move, drag to look. Tap a lit machine.";
+
+  const games = (data.games || []).slice(0, 4).map((g, i) => ({
+    title: (g.title || "Game " + (i + 1)).toUpperCase(),
+    description: g.description || "",
+    image: g.image || "",
+    url: g.url || "#",
+    accent: g.accent || DEFAULT_ACCENTS[i % DEFAULT_ACCENTS.length]
+  }));
+
+  // wait briefly for the font so canvas text uses it
+  try { await Promise.race([document.fonts.load('700 64px "Chakra Petch"'), new Promise(r => setTimeout(r, 1500))]); } catch { /* use fallback font */ }
+
+  dust = buildRoom();
+  buildFallingRain();
+  buildMachines(games, room.title);
+  EXIT = Object.assign({ label: "EXIT", description: "Leave the arcade.", url: "#", accent: "#ff3355", confirm: true, openInNewTab: false },
+                       room.exit || {});
+  buildExit(EXIT);
+  buildAvatars();
+  requestAnimationFrame(tick);
+  $("#loading").classList.add("gone");
+}
+
+boot();
+})();
+</script>
+</body>
+</html>

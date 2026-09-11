@@ -1,0 +1,49 @@
+{
+  "room": {
+    "title": "ARCADE",
+    "tagline": "Take the stairs down. The four lit machines on the back wall are live.",
+    "openInNewTab": true,
+    "exit": {
+      "label": "EXIT",
+      "description": "Leave the arcade and head back to the main site.",
+      "url": "https://shaden.technology/",
+      "accent": "#ff3355",
+      "confirm": true,
+      "openInNewTab": false
+    }
+  },
+  "games": [
+    {
+      "id": "mines",
+      "title": "MINES",
+      "description": "Clear safe tiles on a hidden grid. Each one raises your multiplier; hit a mine and the round ends.",
+      "image": "images/mines.jpg",
+      "url": "https://shaden.technology/mines/",
+      "accent": "#d69ca3"
+    },
+    {
+      "id": "diamonds",
+      "title": "DIAMONDS",
+      "description": "Reveal gems and match stones. The more of the same stone you land, the higher the payout.",
+      "image": "images/diamonds.jpg",
+      "url": "https://shaden.technology/diamonds/",
+      "accent": "#2f8cff"
+    },
+    {
+      "id": "hoops",
+      "title": "HOOPS",
+      "description": "Time your shot and sink it. Longer shots pay more, and a miss resets your streak.",
+      "image": "images/hoops.gif",
+      "url": "https://shaden.technology/hoops/",
+      "accent": "#ff8a1f"
+    },
+    {
+      "id": "collect-cash",
+      "title": "COLLECT CASH",
+      "description": "Grab the cash as it drops and dodge the duds. The longer you last, the bigger the haul.",
+      "image": "images/collect-cash.jpg",
+      "url": "https://lilmayo.cash/",
+      "accent": "#22e06b"
+    }
+  ]
+}
