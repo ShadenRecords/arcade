@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>ARCADE</title>
+<title>The Nexus - Arcade</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&display=swap" rel="stylesheet">
@@ -89,7 +89,7 @@
 <div id="fx"></div>
 
 <div class="hud" id="brand">
-  <h1 id="brandTitle">ARCADE</h1>
+  <h1 id="brandTitle">The Nexus - Arcade</h1>
   <p id="hint">Drag to look. W A S D to move, Shift to run. Click a lit machine.</p>
 </div>
 
@@ -125,7 +125,7 @@
    fetched (e.g. opening index.html straight from disk).
    ===================================================================== */
 const FALLBACK_DATA = {
-  room: { title: "ARCADE", openInNewTab: true,
+  room: { title: "The Nexus - Arcade", openInNewTab: true,
     exit: { label: "EXIT", description: "Leave the arcade and return to The Nexus.", url: "https://shaden.technology/nexus/", accent: "#ff3355", confirm: true, openInNewTab: false } },
   games: [
     { title:"MINES",        description:"Clear safe tiles on a hidden grid. Each one raises your multiplier; hit a mine and the round ends.", image:"images/mines.jpg",        url:"https://shaden.technology/mines/",        accent:"#d69ca3" },
@@ -1249,7 +1249,7 @@ async function loadData() {
 
 async function boot() {
   const data = await loadData();
-  const room = Object.assign({ title: "ARCADE" }, data.room || {});
+  const room = Object.assign({ title: "The Nexus - Arcade" }, data.room || {});
   OPEN_NEW_TAB = room.openInNewTab !== false;
   document.title = room.title;
   $("#brandTitle").textContent = room.title;
